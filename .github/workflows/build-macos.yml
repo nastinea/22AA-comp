@@ -1,0 +1,59 @@
+name: Build macOS VST3
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: DSP unit test
+        run: |
+          clang++ -std=c++17 -O2 -ISource tests/dsp_test.cpp -o dsp_test
+          ./dsp_test
+
+      - name: Configure (universal arm64 + x86_64)
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release -j 4
+
+      - name: Ad-hoc code sign
+        run: |
+          PLUGIN="build/22AAComp_artefacts/Release/VST3/22AA comp.vst3"
+          codesign --force --deep --sign - "$PLUGIN"
+          codesign --verify --verbose "$PLUGIN"
+          lipo -info "$PLUGIN/Contents/MacOS/22AA comp"
+
+      - name: Validate with pluginval
+        run: |
+          curl -L -o pluginval.zip https://github.com/Tracktion/pluginval/releases/latest/download/pluginval_macOS.zip
+          unzip -q pluginval.zip
+          ./pluginval.app/Contents/MacOS/pluginval --strictness-level 7 --skip-gui-tests --validate-in-process \
+            --validate "build/22AAComp_artefacts/Release/VST3/22AA comp.vst3"
+
+      - name: Package
+        run: |
+          cd "build/22AAComp_artefacts/Release/VST3"
+          ditto -c -k --keepParent "22AA comp.vst3" "$GITHUB_WORKSPACE/22AA-comp-macOS-VST3.zip"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: 22AA-comp-macOS-VST3
+          path: 22AA-comp-macOS-VST3.zip
+
+      - name: Publish release (on tags)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: 22AA-comp-macOS-VST3.zip
