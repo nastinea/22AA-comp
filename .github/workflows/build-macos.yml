@@ -52,8 +52,13 @@ jobs:
           name: 22AA-comp-macOS-VST3
           path: 22AA-comp-macOS-VST3.zip
 
-      - name: Publish release (on tags)
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Publish release
+        if: github.event_name != 'pull_request'
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'v1.0.0' }}
+          name: 22AA comp ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'v1.0.0' }}
+          target_commitish: ${{ github.sha }}
           files: 22AA-comp-macOS-VST3.zip
+          body: |
+            VST3 para macOS (Apple Silicon + Intel). Instalación en el README.
